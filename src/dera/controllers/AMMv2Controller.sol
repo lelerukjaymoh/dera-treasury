@@ -8,11 +8,29 @@ import {IUniswapV2Router02} from "uni-v2-periphery/interfaces/IUniswapV2Router02
 import {ITREASURY} from "@dera/Treasury.sol";
 import {IERC20} from "openzeppelin/token/ERC20/IERC20.sol";
 
+interface IAMMv2Controller {
+    function addLiquidity(
+        address tokenA,
+        address tokenB,
+        uint amountADesired,
+        uint amountBDesired,
+        uint amountAMin,
+        uint amountBMin
+    ) external;
+
+    function removeLiquidity(
+        address tokenA,
+        address tokenB,
+        uint liquidity,
+        uint amountAMin,
+        uint amountBMin
+    ) external;
+}
+
 contract AMMv2Controller is AccessControl {
     address constant UNI_V2_FACTORY =
         0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f;
-    address constant TREASURY_ADDRESS =
-        0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f;
+    address immutable TREASURY_ADDRESS;
     address constant UNISWAP_V2_ROUTER_ADDRESS =
         0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
 
@@ -24,8 +42,17 @@ contract AMMv2Controller is AccessControl {
         _;
     }
 
-    constructor() {
+    constructor(address treasuryAddress) {
         _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        TREASURY_ADDRESS = treasuryAddress;
+    }
+
+    function approveSpender(
+        address token,
+        address spender,
+        uint amount
+    ) external onlyAdmin {
+        IERC20(token).approve(spender, amount);
     }
 
     function addLiquidity(
@@ -35,7 +62,7 @@ contract AMMv2Controller is AccessControl {
         uint amountBDesired,
         uint amountAMin,
         uint amountBMin
-    ) external onlyAdmin {
+    ) external onlyAdmin returns (uint liquidity) {
         // check that the pool exists
         if (
             IUniswapV2Factory(UNI_V2_FACTORY).getPair(tokenA, tokenB) ==
@@ -78,16 +105,17 @@ contract AMMv2Controller is AccessControl {
             amountBDesired
         );
 
-        IUniswapV2Router02(UNISWAP_V2_ROUTER_ADDRESS).addLiquidity(
-            tokenA,
-            tokenB,
-            amountADesired,
-            amountBDesired,
-            amountAMin,
-            amountBMin,
-            address(this),
-            block.timestamp
-        );
+        (, , liquidity) = IUniswapV2Router02(UNISWAP_V2_ROUTER_ADDRESS)
+            .addLiquidity(
+                tokenA,
+                tokenB,
+                amountADesired,
+                amountBDesired,
+                amountAMin,
+                amountBMin,
+                address(this),
+                block.timestamp
+            );
     }
 
     function removeLiquidity(
@@ -97,6 +125,15 @@ contract AMMv2Controller is AccessControl {
         uint amountAMin,
         uint amountBMin
     ) external onlyAdmin {
+        IERC20(0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc).balanceOf(
+            address(this)
+        );
+
+        IERC20(0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc).allowance(
+            address(this),
+            UNISWAP_V2_ROUTER_ADDRESS
+        );
+
         IUniswapV2Router02(UNISWAP_V2_ROUTER_ADDRESS).removeLiquidity(
             tokenA,
             tokenB,
